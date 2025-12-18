@@ -288,6 +288,7 @@ if __name__ == "__main__":
     if args.debug:
         tasks = tasks[:1]
         args.num_workers = 1
+        print(tasks[0])
 
     print(f"Found {len(tasks)} videos to process.")
 
