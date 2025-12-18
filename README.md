@@ -5,6 +5,7 @@
 conda create -n process_ego4D python=3.12 -y
 conda activate process_ego4D 
 python -m pip install -r requirements.txt
+conda install -c conda-forge ffmpeg # for video encoding
 ```
 
 ## Download Ego4D videos

@@ -1,8 +1,8 @@
 import os 
 import sys
 
-os.environ['GLOG_minloglevel'] = '2' 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ["GLOG_minloglevel"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import warnings
 warnings.filterwarnings('ignore')
