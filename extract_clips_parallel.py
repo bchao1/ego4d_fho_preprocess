@@ -121,7 +121,8 @@ def process_video_job(args_tuple):
             imageio.mimsave(
                 os.path.join(output_folder, video_id, str(start_frame), 'video.mp4'),
                 extracted_clip,
-                fps=fps
+                fps=fps,
+                macro_block_size=1
             )
 
             # 2. Save the caption
