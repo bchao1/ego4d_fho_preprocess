@@ -53,3 +53,7 @@ python label_clips.py \
             ├── fused_pose.npy # extrinsics, [120, 4, 4]
             ├── intri.npy # intrinsics [3, 3]
 ```
+
+## File locations
+- Ego4D FHO subset: `/scratch/m000051-pm04/brianchc/ego4d_fho/v2/full_scale`
+- EgoVid-5M metadata: `/scratch/m000051-pm04/brianchc/egovid_5M/`
