@@ -165,9 +165,9 @@ def process_video(video_path, output_root):
         size = meta['size'] # (width, height)
         w, h = size
         
-        writer_rgb = imageio.get_writer(path_rgb, fps=fps, codec='libx264')
-        writer_mask = imageio.get_writer(path_mask, fps=fps, codec='libx264')
-        writer_depth = imageio.get_writer(path_depth, fps=fps, codec='libx264')
+        writer_rgb = imageio.get_writer(path_rgb, fps=fps, codec='libx264', macro_block_size=1)
+        writer_mask = imageio.get_writer(path_mask, fps=fps, codec='libx264', macro_block_size=1)
+        writer_depth = imageio.get_writer(path_depth, fps=fps, codec='libx264', macro_block_size=1)
         
         results_dict = {}
 
