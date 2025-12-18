@@ -7,13 +7,16 @@ conda activate process_ego4D
 python -m pip install -r requirements.txt
 ```
 
-## Use Ego4D 
-1. Check Ego4D [website](https://ego4d-data.org/docs/start-here/).
+## Download Ego4D videos
+1. Check Ego4D [website](https://ego4d-data.org/docs/start-here/) and setup AWS credentials and install the ego4d CLI.
 2. Download the Ego4D dataset or a subset (here, I am using the FHO subset).
 ```bash
 ego4d --output_directory="~/ego4d_data" --datasets full_scale # full dataset, full resolution
 ego4d --output_directory="~/ego4d_data" --datasets full_scale --benchmarks FHO # FHO subset
 ```
+
+## Download EgoVid-5M metadata and poses
+1. Download data from [EgoVid-5M](https://github.com/JeffWang987/EgoVid).
 
 ## Run dataset preprocessing
 ```
