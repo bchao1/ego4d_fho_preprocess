@@ -63,95 +63,69 @@ def extract_clip_decord(video_reader, start_frame, end_frame):
     # Returns a decord NDArray, .asnumpy() converts it to a standard numpy array
     return video_reader.get_batch(frame_indices).asnumpy()
 
-def process_video_job(args_tuple):
+def process_clip_job(args_tuple):
     """
-    Worker function to process a single video.
-    Unpacks arguments and contains the logic previously inside the main loop.
+    Worker function to process a SINGLE CLIP.
+    This opens the video, extracts one specific clip, and closes it.
     """
-    video_id, input_folder, output_folder, egovid5M_folder, extraction_method, clips_in_video = args_tuple
+    video_id, clip_id, caption, input_folder, output_folder, egovid5M_folder, extraction_method = args_tuple
 
-    # Ensure output directory exists for this video
-    os.makedirs(os.path.join(output_folder, video_id), exist_ok=True)
-    
+    # Note: Opening the video file for every single clip is less efficient for IO,
+    # but allows perfect parallelization at the clip level as requested.
     video_path = os.path.join(input_folder, f"{video_id}.mp4")
     
     try:
+        # robust parse: {video_id}_{start}_{end}
+        base, start_s, end_s = clip_id.rsplit("_", 2)
+        start_frame = int(start_s)
+        end_frame = start_frame + 120 # only 120 frames for camera poses
+        
+        # Create output directory for this specific clip
+        os.makedirs(os.path.join(output_folder, video_id, str(start_frame)), exist_ok=True)
+
         if extraction_method == "imageio":
             video_reader = imageio.get_reader(video_path, format="ffmpeg")
             fps = video_reader.get_meta_data()["fps"]
+            extracted_clip = extract_clip_imageio(video_reader, start_frame, end_frame)
+            video_reader.close()
         elif extraction_method == "decord":
-            # Initialize VideoReader inside the process to avoid pickle issues
+            # Initialize VideoReader inside the process
             video_reader = VideoReader(video_path, ctx=cpu(0), num_threads=1)
             fps = video_reader.get_avg_fps()
+            extracted_clip = extract_clip_decord(video_reader, start_frame, end_frame)
+            del video_reader
         else:
             raise ValueError(f"Invalid extraction method: {extraction_method}")
 
-        # Note: In parallel execution, this inner tqdm might conflict visually with others.
-        # We keep it as requested, but set position=1 to try and mitigate overlap, 
-        # or rely on leave=False to clear it quickly.
-        pbar_clips = tqdm.tqdm(
-            clips_in_video.itertuples(index=False),
-            total=len(clips_in_video),
-            desc=f"Clips ({video_id})",
-            leave=False,
-            position=1, # Attempt to offset from main bar
-            disable=False # Set to True if terminal output gets too messy
+        # 1. Save the clip
+        imageio.mimsave(
+            os.path.join(output_folder, video_id, str(start_frame), 'video.mp4'),
+            extracted_clip,
+            fps=fps,
+            macro_block_size=1
         )
 
-        for row in pbar_clips:
-            clip_id = row.clip_id.strip() # .mp4
-            caption = row.llava_cap.strip() if row.llava_cap else "" # text caption for the clip. TODO: optional save out!
-
-            # robust parse: {video_id}_{start}_{end}
-            base, start_s, end_s = clip_id.rsplit("_", 2)
-            start_frame = int(start_s)
-            end_frame = start_frame + 120 # only 120 frames for camera poses
-            os.makedirs(os.path.join(output_folder, video_id, str(start_frame)), exist_ok=True)
-
-            pbar_clips.set_postfix_str(f"{clip_id}")
-
-            if extraction_method == "imageio":
-                extracted_clip = extract_clip_imageio(video_reader, start_frame, end_frame)
-            elif extraction_method == "decord":
-                extracted_clip = extract_clip_decord(video_reader, start_frame, end_frame)
-            else:
-                raise ValueError(f"Invalid extraction method: {extraction_method}")
-
-            # 1. Save the clip
-            imageio.mimsave(
-                os.path.join(output_folder, video_id, str(start_frame), 'video.mp4'),
-                extracted_clip,
-                fps=fps,
-                macro_block_size=1
-            )
-
-            # 2. Save the caption
-            with open(os.path.join(output_folder, video_id, str(start_frame), 'caption.txt'), 'w') as f:
-                f.write(caption)
-            
-            # 3. Save the poses
-            # Extrinsics
-            shutil.copyfile(
-                os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "fused_pose.npy"),
-                os.path.join(output_folder, video_id, str(start_frame), "fused_pose.npy")
-            )
-            # Intrinsics
-            shutil.copyfile(
-                os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "intri.npy"),
-                os.path.join(output_folder, video_id, str(start_frame), "intri.npy")
-            )
+        # 2. Save the caption
+        with open(os.path.join(output_folder, video_id, str(start_frame), 'caption.txt'), 'w') as f:
+            f.write(caption)
         
-        # Cleanup
-        if extraction_method == "imageio":
-            video_reader.close()
-        elif extraction_method == "decord":
-            del video_reader
+        # 3. Save the poses
+        # Extrinsics
+        shutil.copyfile(
+            os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "fused_pose.npy"),
+            os.path.join(output_folder, video_id, str(start_frame), "fused_pose.npy")
+        )
+        # Intrinsics
+        shutil.copyfile(
+            os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "intri.npy"),
+            os.path.join(output_folder, video_id, str(start_frame), "intri.npy")
+        )
             
     except Exception as e:
-        print(f"Error processing video {video_id}: {e}")
-        return video_id # Return ID even on error to update progress
+        print(f"Error processing clip {clip_id}: {e}")
+        return clip_id # Return ID even on error to update progress
         
-    return video_id
+    return clip_id
 
 
 if __name__ == "__main__":
@@ -161,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--egovid5M_folder", type=str, required=True, help="Path to the EgoVid-5M dataset metadata folder")
     parser.add_argument("--extraction_method", type=str, required=True, help="Method to extract the clips", choices=["imageio", "decord"])
     parser.add_argument("--num_workers", type=int, default=os.cpu_count(), help="Number of parallel workers (defaults to CPU count)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only single video")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only a few clips")
 
     """
         - egovid-kinematic.csv: 68k videos, with accurate poses (use this)
@@ -184,51 +158,60 @@ if __name__ == "__main__":
     print(f"Found {len(ego4d_video_ids)} videos in the input folder\n")
 
     # 2. Load EgoVid-5M poses annotations
+    # (We still need this to filter which videos we care about)
     egovid5M_video_ids_with_poses = load_ego4D_videos_with_poses(args.egovid5M_folder, ego4d_video_ids)
+    
+    # Create a set for O(1) lookups during filtering
+    valid_video_ids = set(egovid5M_video_ids_with_poses)
 
     # 3. Load EgoVid-5M clip frames
     egovid5M_clips_metadata = load_egovid5M_clips_annotations(args.egovid5M_folder)
 
-    # 4. Extract clips (Parallelized)
+    # 4. Extract clips (Fine-Grained Parallelization)
     
-    # Prepare arguments for each job. 
-    # We pre-filter the dataframe so each worker only gets the rows relevant to its video.
-    # This reduces overhead inside the worker.
-    tasks = []
     print("Preparing tasks for parallel execution...")
-    for video_id in egovid5M_video_ids_with_poses:
-        # Filter metadata for this specific video
-        clips_in_video = egovid5M_clips_metadata[
-            egovid5M_clips_metadata["video_id"] == video_id
-        ].copy() # copy to ensure it's picklable and independent
+    
+    # Filter the metadata upfront to include ONLY the clips belonging to the videos we found
+    valid_clips_df = egovid5M_clips_metadata[
+        egovid5M_clips_metadata["video_id"].isin(valid_video_ids)
+    ]
+    
+    print(f"Processing {len(valid_clips_df)} individual clips across {len(valid_video_ids)} videos.")
+
+    tasks = []
+    # Create a task for every single clip row
+    for row in valid_clips_df.itertuples(index=False):
+        clip_id = row.clip_id.strip()
+        video_id = row.video_id.strip()
+        caption = row.llava_cap.strip() if row.llava_cap else "" 
         
-        if not clips_in_video.empty:
-            tasks.append((
-                video_id, 
-                args.input_folder, 
-                args.output_folder, 
-                args.egovid5M_folder, 
-                args.extraction_method, 
-                clips_in_video
-            ))
+        tasks.append((
+            video_id,
+            clip_id,
+            caption,
+            args.input_folder,
+            args.output_folder,
+            args.egovid5M_folder,
+            args.extraction_method
+        ))
     
     if args.debug:
-        tasks = tasks[:1]
-        args.num_workers = 1
+        print("Debug mode enabled: Processing only 5 clips.")
+        tasks = tasks[:5]
 
-    print(f"Dispatched {len(tasks)} video tasks to {args.num_workers} workers.")
+    print(f"Dispatched {len(tasks)} clip tasks to {args.num_workers} workers.")
 
     # Use multiprocessing Pool
-    # We use imap_unordered to update the progress bar as soon as ANY video finishes
+    # We parallelize over CLIPS now
     with multiprocessing.Pool(processes=args.num_workers) as pool:
-        pbar_videos = tqdm.tqdm(
-            pool.imap_unordered(process_video_job, tasks),
+        pbar = tqdm.tqdm(
+            pool.imap_unordered(process_clip_job, tasks),
             total=len(tasks),
-            desc="Videos Completed"
+            desc="Clips Completed"
         )
         
         # Consume the iterator to trigger execution
-        for _ in pbar_videos:
+        for _ in pbar:
             pass
 
     print("Preprocessing pipeline completed successfully\n")

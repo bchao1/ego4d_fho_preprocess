@@ -4,6 +4,21 @@ import sys
 os.environ["GLOG_minloglevel"] = "3"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+class SuppressStderr:
+    def __init__(self):
+        self.null_fds = [os.open(os.devnull, os.O_RDWR) for x in range(2)]
+        self.save_fds = [os.dup(1), os.dup(2)]
+
+    def __enter__(self):
+        os.dup2(self.null_fds[0], 1)
+        os.dup2(self.null_fds[1], 2)
+
+    def __exit__(self, *_):
+        os.dup2(self.save_fds[0], 1)
+        os.dup2(self.save_fds[1], 2)
+        for fd in self.null_fds + self.save_fds:
+            os.close(fd)
+
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -185,47 +200,47 @@ def process_video(video_path, output_root):
         writer_depth = imageio.get_writer(path_depth, fps=fps, codec='libx264', macro_block_size=1)
         
         results_dict = {}
-
-        with mp.tasks.vision.HandLandmarker.create_from_options(options) as landmarker:
-            for i, frame in enumerate(reader):
-                # MP requires RGB
-                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
-                timestamp_ms = int((i * 1000) / fps)
-                
-                # Detect
-                detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
-                
-                # Extract Landmarks (Standard Detection, No Force Swap)
-                current_hands_lms = detection_result.hand_landmarks
-
-                # 1. Create Annotated RGB
-                frame_rgb_out = draw_rgb_annotated(frame, current_hands_lms)
-                
-                # 2. Create Skeleton Mask (Black BG)
-                frame_mask_out = draw_skeleton_mask(h, w, current_hands_lms)
-                
-                # 3. Create Depth Map (Grayscale Interp)
-                frame_depth_out = draw_depth_skeleton(h, w, current_hands_lms)
-                
-                # Write Frames
-                writer_rgb.append_data(frame_rgb_out)
-                writer_mask.append_data(frame_mask_out)
-                writer_depth.append_data(frame_depth_out)
-                
-                # Store JSON Data
-                if current_hands_lms:
-                    frame_data = []
-                    for idx, hand_lms in enumerate(current_hands_lms):
-                        # Get label if available
-                        label = "Unknown"
-                        if idx < len(detection_result.handedness):
-                             label = detection_result.handedness[idx][0].category_name
-                        
-                        frame_data.append({
-                            "label": label,
-                            "landmarks": landmarks_to_list(hand_lms)
-                        })
-                    results_dict[i] = frame_data
+        
+        with SuppressStderr():
+            with mp.tasks.vision.HandLandmarker.create_from_options(options) as landmarker:
+                for i, frame in enumerate(reader):
+                    # MP requires RGB
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                    timestamp_ms = int((i * 1000) / fps)
+                    
+                    # Detect
+                    detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                    
+                    # Extract Landmarks (Standard Detection, No Force Swap)
+                    current_hands_lms = detection_result.hand_landmarks
+                    # 1. Create Annotated RGB
+                    frame_rgb_out = draw_rgb_annotated(frame, current_hands_lms)
+                    
+                    # 2. Create Skeleton Mask (Black BG)
+                    frame_mask_out = draw_skeleton_mask(h, w, current_hands_lms)
+                    
+                    # 3. Create Depth Map (Grayscale Interp)
+                    frame_depth_out = draw_depth_skeleton(h, w, current_hands_lms)
+                    
+                    # Write Frames
+                    writer_rgb.append_data(frame_rgb_out)
+                    writer_mask.append_data(frame_mask_out)
+                    writer_depth.append_data(frame_depth_out)
+                    
+                    # Store JSON Data
+                    if current_hands_lms:
+                        frame_data = []
+                        for idx, hand_lms in enumerate(current_hands_lms):
+                            # Get label if available
+                            label = "Unknown"
+                            if idx < len(detection_result.handedness):
+                                label = detection_result.handedness[idx][0].category_name
+                            
+                            frame_data.append({
+                                "label": label,
+                                "landmarks": landmarks_to_list(hand_lms)
+                            })
+                        results_dict[i] = frame_data
 
         reader.close()
         writer_rgb.close()
