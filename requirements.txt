@@ -1,0 +1,9 @@
+decord
+mediapipe==0.10.21
+numpy
+imageio
+imageio[ffmpeg]
+opencv-python
+pandas
+tqdm
+shutil
