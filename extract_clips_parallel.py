@@ -134,7 +134,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_folder", type=str, required=True, help="Path to the output folder (where you want to save the clips)")
     parser.add_argument("--egovid5M_folder", type=str, required=True, help="Path to the EgoVid-5M dataset metadata folder")
     parser.add_argument("--extraction_method", type=str, required=True, help="Method to extract the clips", choices=["imageio", "decord"])
-    parser.add_argument("--num_workers", type=int, default=os.cpu_count(), help="Number of parallel workers (defaults to CPU count)")
+    parser.add_argument("--num_workers", type=int, default=16, help="Number of parallel workers (defaults to CPU count)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only a few clips")
 
     """
