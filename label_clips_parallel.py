@@ -249,6 +249,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--input_folder", type=str, required=True, help="Path to input data")
     parser.add_argument("--num_workers", type=int, default=os.cpu_count(), help="Number of parallel workers")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only single video")
     args = parser.parse_args()
 
     input_folder = args.input_folder
@@ -283,6 +284,10 @@ if __name__ == "__main__":
                 tasks.append((video_path, args.input_folder))
             else:
                 print(f"Skipping {start_frame_path}, no video.mp4 found.")
+    
+    if args.debug:
+        tasks = tasks[:1]
+        args.num_workers = 1
 
     print(f"Found {len(tasks)} videos to process.")
 

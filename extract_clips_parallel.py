@@ -161,6 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--egovid5M_folder", type=str, required=True, help="Path to the EgoVid-5M dataset metadata folder")
     parser.add_argument("--extraction_method", type=str, required=True, help="Method to extract the clips", choices=["imageio", "decord"])
     parser.add_argument("--num_workers", type=int, default=os.cpu_count(), help="Number of parallel workers (defaults to CPU count)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only single video")
 
     """
         - egovid-kinematic.csv: 68k videos, with accurate poses (use this)
@@ -210,6 +211,10 @@ if __name__ == "__main__":
                 args.extraction_method, 
                 clips_in_video
             ))
+    
+    if args.debug:
+        tasks = tasks[:1]
+        args.num_workers = 1
 
     print(f"Dispatched {len(tasks)} video tasks to {args.num_workers} workers.")
 
