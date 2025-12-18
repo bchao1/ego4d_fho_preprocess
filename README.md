@@ -28,7 +28,7 @@ This bash script does the following:
 1. Extract EgoVid-5M clips from Ego4D videos 
 
 ```bash
-python extract_clips.py \
+python extract_clips_parallel.py \
     --input_folder /miele/data/ego4d_fho/v2/full_scale \ # path to the Ego4D dataset or subset
     --output_folder ./test_dataset/extracted_clips \ # path to the extracted clipsfolder
     --egovid5M_folder /miele/data/ego5M \ # path to the EgoVid-5M metadata folder
@@ -37,9 +37,11 @@ python extract_clips.py \
 
 2. Label the clips with mediapipe
 ```bash
-python label_clips.py \
+python label_clips_parallel.py \
     --input_folder ./test_dataset/extracted_clips # path to the extracted clips folder
 ```
+
+For both scripts, use `*_parallel.py` for parallel processing. Set `--debug` to process only single video.
 
 ## Processed dataset format
 ```
