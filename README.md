@@ -56,6 +56,7 @@ For both scripts, use `*_parallel.py` for parallel processing. Set `--debug` to 
             ├── fused_pose.npy # extrinsics, [120, 4, 4]
             ├── intri.npy # intrinsics [3, 3]
 ```
+See [here](https://drive.google.com/drive/folders/1Q5SyGhlA_DEsBntP89i6B33IeSjfx_We?usp=sharing) for an annotated video example.
 
 ## File locations
 - Ego4D FHO subset: `/scratch/m000051-pm04/brianchc/ego4d_fho/v2/full_scale`
