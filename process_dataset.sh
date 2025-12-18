@@ -1,10 +1,12 @@
 # Extract clips from videos
-python extract_clips.py \
-    --input_folder /miele/data/ego4d_fho/v2/full_scale \
-    --output_folder ./test_dataset/extracted_clips \
-    --egovid5M_folder /miele/data/ego5M \
+python extract_clips_parallel.py \
+    --input_folder /scratch/m000051-pm04/brianchc/ego4d_fho/v2/full_scale \
+    --output_folder /scratch/m000051-pm04/brianchc/handctrl_data_v1 \
+    --egovid5M_folder /scratch/m000051-pm04/brianchc/egovid_5M/ \
     --extraction_method decord # for faster extraction, use decord
 
+exit
+
 # Extract poses from videos
-python label_clips.py \
-    --input_folder ./test_dataset/extracted_clips 
+python label_clips_parallel.py \
+    --input_folder /scratch/m000051-pm04/brianchc/handctrl_data_v1

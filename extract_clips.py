@@ -138,11 +138,11 @@ if __name__ == "__main__":
                 raise ValueError(f"Invalid extraction method: {args.extraction_method}")
 
             # 1. Save the clip
-            #imageio.mimsave(
-            #    os.path.join(args.output_folder, video_id, str(start_frame), 'video.mp4'),
-            #    extracted_clip,
-            #    fps=fps
-            #)
+            imageio.mimsave(
+                os.path.join(args.output_folder, video_id, str(start_frame), 'video.mp4'),
+                extracted_clip,
+                fps=fps
+            )
 
             # 2. Save the caption
             with open(os.path.join(args.output_folder, video_id, str(start_frame), 'caption.txt'), 'w') as f:

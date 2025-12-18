@@ -1,3 +1,12 @@
+import os 
+import sys
+
+os.environ['GLOG_minloglevel'] = '2' 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+import warnings
+warnings.filterwarnings('ignore')
+
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -5,7 +14,7 @@ from mediapipe.framework.formats import landmark_pb2
 from mediapipe import solutions
 import numpy as np
 import imageio
-import os
+
 import json
 import cv2
 from argparse import ArgumentParser
