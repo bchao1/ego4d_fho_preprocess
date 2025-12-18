@@ -6,4 +6,3 @@ imageio[ffmpeg]
 opencv-python
 pandas
 tqdm
-shutil
