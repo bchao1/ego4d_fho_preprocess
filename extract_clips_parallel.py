@@ -168,6 +168,8 @@ if __name__ == "__main__":
         valid_video_ids = set(egovid5M_video_ids_with_poses) # only video ids with poses
     else:
         valid_video_ids = set(ego4d_video_ids) # all video ids
+    
+    print(f"Processing {len(valid_video_ids)} videos\n")
 
     # 3. Load EgoVid-5M clip frames
     egovid5M_clips_metadata = load_egovid5M_clips_annotations(args.egovid5M_folder)
