@@ -109,17 +109,18 @@ def process_clip_job(args_tuple):
         with open(os.path.join(output_folder, video_id, str(start_frame), 'caption.txt'), 'w') as f:
             f.write(caption)
         
-        # 3. Save the poses
-        # Extrinsics
-        shutil.copyfile(
-            os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "fused_pose.npy"),
-            os.path.join(output_folder, video_id, str(start_frame), "fused_pose.npy")
-        )
-        # Intrinsics
-        shutil.copyfile(
-            os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "intri.npy"),
-            os.path.join(output_folder, video_id, str(start_frame), "intri.npy")
-        )
+        # 3. Save the poses, only if they exist
+        if os.path.exists(os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0])):
+            # Extrinsics
+            shutil.copyfile(
+                os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "fused_pose.npy"),
+                os.path.join(output_folder, video_id, str(start_frame), "fused_pose.npy")
+            )
+            # Intrinsics
+            shutil.copyfile(
+                os.path.join(egovid5M_folder, "poses", clip_id.split(".")[0], "intri.npy"),
+                os.path.join(output_folder, video_id, str(start_frame), "intri.npy")
+            )
             
     except Exception as e:
         print(f"Error processing clip {clip_id}: {e}")
@@ -136,6 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("--extraction_method", type=str, required=True, help="Method to extract the clips", choices=["imageio", "decord"])
     parser.add_argument("--num_workers", type=int, default=16, help="Number of parallel workers (defaults to CPU count)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only a few clips")
+    parser.add_argument("--process_poses_clips_only", action="store_true", help="Process only the clips with poses")
 
     """
         - egovid-kinematic.csv: 68k videos, with accurate poses (use this)
@@ -162,7 +164,10 @@ if __name__ == "__main__":
     egovid5M_video_ids_with_poses = load_ego4D_videos_with_poses(args.egovid5M_folder, ego4d_video_ids)
     
     # Create a set for O(1) lookups during filtering
-    valid_video_ids = set(egovid5M_video_ids_with_poses)
+    if args.process_poses_clips_only:
+        valid_video_ids = set(egovid5M_video_ids_with_poses) # only video ids with poses
+    else:
+        valid_video_ids = set(ego4d_video_ids) # all video ids
 
     # 3. Load EgoVid-5M clip frames
     egovid5M_clips_metadata = load_egovid5M_clips_annotations(args.egovid5M_folder)
