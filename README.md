@@ -59,6 +59,12 @@ For both scripts, use `*_parallel.py` for parallel processing. Set `--debug` to 
 ```
 See [here](https://drive.google.com/drive/folders/1Q5SyGhlA_DEsBntP89i6B33IeSjfx_We?usp=sharing) for an annotated video example.
 
+## Dataset statistics
+| Dataset | Total clips | Total clips with poses| Total clips without poses |
+|---------|--------------|-------------|--------------|
+| Ego4D FHO | 1105037 | 28151 | 1076886 |
+| Ego4D Full (EgoVid-5M) | 5M | 68k | 4.93M |
+
 ## File locations
 On `marlowe`:
 - Ego4D FHO subset: `/scratch/m000051-pm04/brianchc/ego4d_fho/v2/full_scale`
