@@ -263,7 +263,7 @@ def process_video_wrapper(args):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--input_folder", type=str, required=True, help="Path to input data")
-    parser.add_argument("--num_workers", type=int, default=os.cpu_count(), help="Number of parallel workers")
+    parser.add_argument("--num_workers", type=int, default=16, help="Number of parallel workers")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only single video")
     args = parser.parse_args()
 

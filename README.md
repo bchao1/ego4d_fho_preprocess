@@ -12,9 +12,10 @@ conda install -c conda-forge ffmpeg # for video encoding
 1. Check Ego4D [website](https://ego4d-data.org/docs/start-here/) and setup AWS credentials and install the ego4d CLI.
 2. Download the Ego4D dataset or a subset (here, I am using the FHO subset).
 ```bash
-ego4d --output_directory="~/ego4d_data" --datasets full_scale # full dataset, full resolution
-ego4d --output_directory="~/ego4d_data" --datasets full_scale --benchmarks FHO # FHO subset
+ego4d --output_directory="ego4d_full" --datasets full_scale --aws_profile_name ego4d # full dataset, full resolution
+ego4d --output_directory="ego4d_fho" --datasets full_scale --benchmarks FHO --aws_profile_name ego4d # FHO subset
 ```
+3. Check [here](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/cli/README.md) for setting up AWS credentials.
 
 ## Download EgoVid-5M metadata and poses
 1. Download data from [EgoVid-5M](https://github.com/JeffWang987/EgoVid).
