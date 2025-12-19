@@ -10,11 +10,10 @@ import multiprocessing
 from functools import partial
 
 def load_egovid5M_clips_annotations(egovid5M_folder):
-    df_kinematic = pd.read_csv(os.path.join(egovid5M_folder, "egovid-kinematic.csv"))
-    df_val = pd.read_csv(os.path.join(egovid5M_folder, "egovid-val.csv"))
-    df_full = pd.read_csv(os.path.join(egovid5M_folder, "egovid-text.csv")) # Full 5M dataset, no poses
-    
-    df_clips = pd.concat([df_kinematic, df_val, df_full], ignore_index=True)
+    df_1 = pd.read_csv(os.path.join(egovid5M_folder, "egovid-kinematic.csv"))
+    df_2 = pd.read_csv(os.path.join(egovid5M_folder, "egovid-val.csv"))
+    df_3 = pd.read_csv(os.path.join(egovid5M_folder, "egovid-text.csv")) # Full 5M dataset, no poses
+    df_clips = pd.concat([df_1, df_2, df_3], ignore_index=True)
     df_clips = df_clips.rename(columns={"video_id": "clip_id"}) # original video_id is now clip_id = {video_id}_{start_frame}_{end_frame}
     df_clips["video_id"] = df_clips["clip_id"].str.rsplit("_", n=2).str[0] # video_id is the first part of the clip_id
     print("Found {} clips with frames annotations in the EgoVid-5M dataset\n".format(len(df_clips)))
