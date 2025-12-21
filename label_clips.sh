@@ -7,6 +7,7 @@ python label_clips_parallel.py \
     --num_workers 16
 else
 python label_clips_parallel.py \
-    --input_folder ./test_dataset/handctrl_data_v1
+    --input_folder ./test_dataset/handctrl_data_v1 \
+    --num_workers 16
 fi
 

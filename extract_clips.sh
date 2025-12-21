@@ -12,8 +12,9 @@ python extract_clips_parallel.py \
 else
 python extract_clips_parallel.py \
     --input_folder /miele/data/ego4d_fho/v2/full_scale/ \
-    --output_folder ./test_dataset/handctrl_data_v1 \
+    --output_folder ./test_dataset/$out_folder \
     --egovid5M_folder /miele/data/ego5M/ \
-    --extraction_method decord
+    --extraction_method decord \
+    --num_workers 16
 fi
 

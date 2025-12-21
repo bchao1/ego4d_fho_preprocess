@@ -256,6 +256,72 @@ def process_video(video_path, output_root):
         print(f"Error processing {video_id}/{start_frame}: {e}")
         return None
 
+def is_clip_processed(video_path, output_root):
+    """
+    Check if a clip has already been processed and all labeled files are valid.
+    Returns True if all output files exist and are not corrupted:
+    - annotated_rgb.mp4
+    - skeleton_mask.mp4
+    - depth_map.mp4
+    - landmarks.json
+    """
+    try:
+        # Construct output paths (same structure as process_video)
+        parts = video_path.split(os.sep)
+        video_id = parts[-3]
+        start_frame = parts[-2]
+        
+        save_dir = os.path.join(output_root, video_id, start_frame)
+        
+        path_rgb = os.path.join(save_dir, "annotated_rgb.mp4")
+        path_mask = os.path.join(save_dir, "skeleton_mask.mp4")
+        path_depth = os.path.join(save_dir, "depth_map.mp4")
+        path_json = os.path.join(save_dir, "landmarks.json")
+        
+        # List of all required files
+        required_files = [
+            (path_rgb, "video"),
+            (path_mask, "video"),
+            (path_depth, "video"),
+            (path_json, "json")
+        ]
+        
+        # Check all files exist and are valid
+        for file_path, file_type in required_files:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return False
+            
+            # Check if file size is reasonable (at least 1KB to avoid empty/corrupted files)
+            if os.path.getsize(file_path) < 1024:
+                return False
+            
+            # Validate file based on type
+            if file_type == "video":
+                # Try to verify the video is not corrupted by attempting to read it
+                try:
+                    reader = imageio.get_reader(file_path)
+                    # Try to get metadata to verify it's readable
+                    reader.get_meta_data()
+                    reader.close()
+                except Exception:
+                    # If we can't read the video, consider it corrupted/not processed
+                    return False
+            elif file_type == "json":
+                # Try to verify the JSON is valid by attempting to parse it
+                try:
+                    with open(file_path, 'r') as f:
+                        json.load(f)
+                except Exception:
+                    # If we can't parse the JSON, consider it corrupted/not processed
+                    return False
+        
+        # All files exist and are valid
+        return True
+    except Exception:
+        # If any error occurs during checking, consider it not processed
+        return False
+
 def process_video_wrapper(args):
     """Wrapper to unpack arguments for multiprocessing pool."""
     return process_video(*args)
@@ -278,6 +344,7 @@ if __name__ == "__main__":
         exit()
 
     tasks = []
+    already_processed = 0
 
     print("Scanning directory for videos...")
     # Pre-scan directories to build task list
@@ -294,16 +361,25 @@ if __name__ == "__main__":
             
             video_path = os.path.join(start_frame_path, 'video.mp4')
             
-            if os.path.exists(video_path):
-                # We store the args tuple for each job
-                tasks.append((video_path, args.input_folder))
-            else:
+            if not os.path.exists(video_path):
                 print(f"Skipping {start_frame_path}, no video.mp4 found.")
+                continue
+            
+            # Check if clip is already processed (all labeled files exist and are valid)
+            if is_clip_processed(video_path, args.input_folder):
+                already_processed += 1
+                continue
+            
+            # We store the args tuple for each job
+            tasks.append((video_path, args.input_folder))
+    
+    print(f"Found {already_processed} clips already processed. Processing {len(tasks)} remaining clips.")
     
     if args.debug:
         tasks = tasks[:1]
         args.num_workers = 1
-        print(tasks[0])
+        if tasks:
+            print(tasks[0])
 
     print(f"Found {len(tasks)} videos to process.")
 

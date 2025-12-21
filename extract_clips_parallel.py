@@ -63,6 +63,50 @@ def extract_clip_decord(video_reader, start_frame, end_frame):
     # Returns a decord NDArray, .asnumpy() converts it to a standard numpy array
     return video_reader.get_batch(frame_indices).asnumpy()
 
+def is_clip_processed(video_id, clip_id, output_folder, extraction_method):
+    """
+    Check if a clip has already been processed and is valid.
+    Returns True if the clip exists and the video file is not corrupted.
+    """
+    try:
+        # Parse clip_id to get start_frame
+        base, start_s, end_s = clip_id.rsplit("_", 2)
+        start_frame = int(start_s)
+        
+        video_path = os.path.join(output_folder, video_id, str(start_frame), 'video.mp4')
+        
+        # Check if video file exists
+        if not os.path.exists(video_path):
+            return False
+        
+        # Check if file size is reasonable (at least 1KB to avoid empty/corrupted files)
+        if os.path.getsize(video_path) < 1024:
+            return False
+        
+        # Try to verify the video is not corrupted by attempting to read it
+        try:
+            if extraction_method == "imageio":
+                reader = imageio.get_reader(video_path, format="ffmpeg")
+                # Try to get metadata to verify it's readable
+                reader.get_meta_data()
+                reader.close()
+            elif extraction_method == "decord":
+                reader = VideoReader(video_path, ctx=cpu(0), num_threads=1)
+                # Try to get frame count to verify it's readable
+                len(reader)
+                del reader
+            else:
+                # For unknown methods, just check file exists and has reasonable size
+                pass
+        except Exception:
+            # If we can't read the video, consider it corrupted/not processed
+            return False
+        
+        return True
+    except Exception:
+        # If any error occurs during checking, consider it not processed
+        return False
+
 def process_clip_job(args_tuple):
     """
     Worker function to process a SINGLE CLIP.
@@ -186,11 +230,19 @@ if __name__ == "__main__":
     print(f"Processing {len(valid_clips_df)} individual clips across {len(valid_video_ids)} videos.")
 
     tasks = []
-    # Create a task for every single clip row
+    already_processed = 0
+    
+    # Create a task for every single clip row, but skip already processed clips
+    print("Checking for already processed clips...")
     for row in valid_clips_df.itertuples(index=False):
         clip_id = row.clip_id.strip()
         video_id = row.video_id.strip()
         caption = row.llava_cap.strip() if row.llava_cap else "" 
+        
+        # Check if clip is already processed
+        if is_clip_processed(video_id, clip_id, args.output_folder, args.extraction_method):
+            already_processed += 1
+            continue
         
         tasks.append((
             video_id,
@@ -201,6 +253,8 @@ if __name__ == "__main__":
             args.egovid5M_folder,
             args.extraction_method
         ))
+    
+    print(f"Found {already_processed} clips already processed. Processing {len(tasks)} remaining clips.")
     
     if args.debug:
         print("Debug mode enabled: Processing only 5 clips.")
