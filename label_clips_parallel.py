@@ -32,6 +32,7 @@ import imageio
 
 import json
 import cv2
+import csv
 from argparse import ArgumentParser
 import multiprocessing
 import tqdm
@@ -41,6 +42,28 @@ import tqdm
 MODEL_PATH = 'hand_landmarker.task' 
 # Print handled in main now to avoid spamming in parallel
 # print(f"Using model from {MODEL_PATH}")
+
+# Finger colors (RGB format)
+FINGER_COLORS = {
+    'pinky': [[100, 0, 100], [150, 0, 150], [200, 0, 200], [255, 0, 255]],    # magenta gradient
+    'ring': [[0, 50, 100], [0, 75, 150], [0, 100, 200], [0, 125, 255]],       # blue gradient  
+    'middle': [[0, 100, 50], [0, 150, 75], [0, 200, 100], [0, 255, 125]],     # green gradient
+    'index': [[100, 100, 0], [150, 150, 0], [200, 200, 0], [255, 255, 0]],    # yellow gradient
+    'thumb': [[100, 0, 0], [150, 0, 0], [200, 0, 0], [255, 0, 0]]                          # red gradient
+}
+
+# Landmark color (pure blue in RGB)
+JOINT_RADIUS = 8
+LINE_THICKNESS = 5
+LANDMARK_COLOR = (100, 100, 100)  # Pure blue in RGB (BGR: (255, 0, 0))
+
+CONNECTIONS = {
+    'thumb': [(0, 1), (1, 2), (2, 3), (3, 4)],
+    'index': [(0, 5), (5, 6), (6, 7), (7, 8)],
+    'middle': [(0, 9), (9, 10), (10, 11), (11, 12)],
+    'ring': [(0, 13), (13, 14), (14, 15), (15, 16)],
+    'pinky': [(0, 17), (17, 18), (18, 19), (19, 20)]
+}
 
 # --- Helper Functions ---
 
@@ -120,44 +143,60 @@ def draw_depth_skeleton(height, width, hand_landmarks_list):
     return depth_image
 
 def draw_skeleton_mask(height, width, hand_landmarks_list):
-    """Draws white skeletons on a black background."""
+    """Draws colored skeletons on a black background with custom finger colors."""
     mask_image = np.zeros((height, width, 3), dtype=np.uint8)
     
     for landmarks in hand_landmarks_list:
-        # Convert to protobuf for MP Utils
-        proto_list = landmark_pb2.NormalizedLandmarkList()
-        proto_list.landmark.extend([
-            landmark_pb2.NormalizedLandmark(x=lm.x, y=lm.y, z=lm.z) 
+        # Convert landmarks to pixel coordinates
+        px_points = [
+            (int(lm.x * width), int(lm.y * height)) 
             for lm in landmarks
-        ])
+        ]
         
-        solutions.drawing_utils.draw_landmarks(
-            image=mask_image,
-            landmark_list=proto_list,
-            connections=solutions.hands.HAND_CONNECTIONS,
-            landmark_drawing_spec=solutions.drawing_styles.get_default_hand_landmarks_style(),
-            connection_drawing_spec=solutions.drawing_styles.get_default_hand_connections_style()
-        )
+        # Draw connections with finger-specific colors
+        for finger, finger_connections in CONNECTIONS.items():
+            for joint, (idx1, idx2) in enumerate(finger_connections):
+                color_rgb = FINGER_COLORS[finger][joint]
+                color = tuple(color_rgb)  # Use RGB directly
+            
+                start_point = px_points[idx1]
+                end_point = px_points[idx2]
+                cv2.line(mask_image, start_point, end_point, color, LINE_THICKNESS)
+        
+        # Draw landmarks as pure blue circles
+        for i, lm in enumerate(landmarks):
+            cx, cy = int(lm.x * width), int(lm.y * height)
+            cv2.circle(mask_image, (cx, cy), JOINT_RADIUS, LANDMARK_COLOR, -1)
+    
     return mask_image
 
 def draw_rgb_annotated(rgb_image, hand_landmarks_list):
-    """Draws standard MediaPipe annotations on the original image."""
+    """Draws hand landmarks with custom finger colors on the original image."""
     annotated_image = np.copy(rgb_image)
+    h, w = rgb_image.shape[:2]
     
     for landmarks in hand_landmarks_list:
-        proto_list = landmark_pb2.NormalizedLandmarkList()
-        proto_list.landmark.extend([
-            landmark_pb2.NormalizedLandmark(x=lm.x, y=lm.y, z=lm.z) 
+        # Convert landmarks to pixel coordinates
+        px_points = [
+            (int(lm.x * w), int(lm.y * h)) 
             for lm in landmarks
-        ])
+        ]
         
-        solutions.drawing_utils.draw_landmarks(
-            image=annotated_image,
-            landmark_list=proto_list,
-            connections=solutions.hands.HAND_CONNECTIONS,
-            landmark_drawing_spec=solutions.drawing_styles.get_default_hand_landmarks_style(),
-            connection_drawing_spec=solutions.drawing_styles.get_default_hand_connections_style()
-        )
+        # Draw connections with finger-specific colors
+        for finger, finger_connections in CONNECTIONS.items():
+            for joint, (idx1, idx2) in enumerate(finger_connections):
+                color_rgb = FINGER_COLORS[finger][joint]
+                color = tuple(color_rgb)  # Use RGB directly
+            
+                start_point = px_points[idx1]
+                end_point = px_points[idx2]
+                cv2.line(annotated_image, start_point, end_point, color, LINE_THICKNESS)
+        
+        # Draw landmarks as pure blue circles
+        for i, lm in enumerate(landmarks):
+            cx, cy = int(lm.x * w), int(lm.y * h)
+            cv2.circle(annotated_image, (cx, cy), JOINT_RADIUS, LANDMARK_COLOR, -1)
+    
     return annotated_image
 
 def process_video(video_path, output_root):
@@ -172,9 +211,12 @@ def process_video(video_path, output_root):
     os.makedirs(save_dir, exist_ok=True)
     
     path_rgb = os.path.join(save_dir, "annotated_rgb.mp4")
-    path_mask = os.path.join(save_dir, "skeleton_mask.mp4")
+    path_mask = os.path.join(save_dir, "skeleton.mp4")
     path_depth = os.path.join(save_dir, "depth_map.mp4")
     path_json = os.path.join(save_dir, "landmarks.json")
+    path_reference_img = os.path.join(save_dir, "reference_img.png")
+    path_caption = os.path.join(save_dir, "caption.txt")
+    path_fused_pose = os.path.join(save_dir, "fused_pose.npy")
 
     # In parallel, printing can get messy. 
     # We rely on the progress bar in main, but keeping this as debug info.
@@ -185,7 +227,7 @@ def process_video(video_path, output_root):
     options = mp.tasks.vision.HandLandmarkerOptions(
         base_options=mp.tasks.BaseOptions(model_asset_path=MODEL_PATH),
         running_mode=mp.tasks.vision.RunningMode.VIDEO, 
-        num_hands=2,
+        num_hands=3,  # Detect up to 3 hands
     )
 
     try:
@@ -200,16 +242,24 @@ def process_video(video_path, output_root):
         writer_depth = imageio.get_writer(path_depth, fps=fps, codec='libx264', macro_block_size=1)
         
         results_dict = {}
+        first_frame = None
+        success = True
         
         with SuppressStderr():
             with mp.tasks.vision.HandLandmarker.create_from_options(options) as landmarker:
                 for i, frame in enumerate(reader):
+                    # Save first frame for reference image
+                    if i == 0:
+                        first_frame = frame
                     # MP requires RGB
                     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
                     timestamp_ms = int((i * 1000) / fps)
                     
                     # Detect
                     detection_result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                    # success is false if more than 2 hands are detected
+                    if len(detection_result.hand_landmarks) > 2:
+                        success = False
                     
                     # Extract Landmarks (Standard Detection, No Force Swap)
                     current_hands_lms = detection_result.hand_landmarks
@@ -247,23 +297,41 @@ def process_video(video_path, output_root):
         writer_mask.close()
         writer_depth.close()
         
+        # Save first frame as reference image
+        if first_frame is not None:
+            # Convert RGB to BGR for cv2.imwrite (OpenCV uses BGR)
+            first_frame_bgr = cv2.cvtColor(first_frame, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(path_reference_img, first_frame_bgr)
+        
         with open(path_json, 'w') as f:
             json.dump(results_dict, f, indent=4)
-    
-        return f"{video_id}/{start_frame}"
+        
+        # Return metadata dictionary
+        return {
+            "video_id": video_id,
+            "start_frame": start_frame,
+            "success": success,
+            "error": None
+        }
             
     except Exception as e:
-        print(f"Error processing {video_id}/{start_frame}: {e}")
-        return None
+        error_msg = str(e)
+        return {
+            "video_id": video_id,
+            "start_frame": start_frame,
+            "success": False,
+            "error": error_msg
+        }
 
 def is_clip_processed(video_path, output_root):
     """
     Check if a clip has already been processed and all labeled files are valid.
     Returns True if all output files exist and are not corrupted:
     - annotated_rgb.mp4
-    - skeleton_mask.mp4
+    - skeleton.mp4
     - depth_map.mp4
     - landmarks.json
+    - reference_img.png
     """
     try:
         # Construct output paths (same structure as process_video)
@@ -274,16 +342,18 @@ def is_clip_processed(video_path, output_root):
         save_dir = os.path.join(output_root, video_id, start_frame)
         
         path_rgb = os.path.join(save_dir, "annotated_rgb.mp4")
-        path_mask = os.path.join(save_dir, "skeleton_mask.mp4")
+        path_mask = os.path.join(save_dir, "skeleton.mp4")
         path_depth = os.path.join(save_dir, "depth_map.mp4")
         path_json = os.path.join(save_dir, "landmarks.json")
+        path_reference_img = os.path.join(save_dir, "reference_img.png")
         
         # List of all required files
         required_files = [
             (path_rgb, "video"),
             (path_mask, "video"),
             (path_depth, "video"),
-            (path_json, "json")
+            (path_json, "json"),
+            (path_reference_img, "image")
         ]
         
         # Check all files exist and are valid
@@ -315,6 +385,15 @@ def is_clip_processed(video_path, output_root):
                 except Exception:
                     # If we can't parse the JSON, consider it corrupted/not processed
                     return False
+            elif file_type == "image":
+                # Try to verify the image is valid by attempting to read it
+                try:
+                    img = cv2.imread(file_path)
+                    if img is None:
+                        return False
+                except Exception:
+                    # If we can't read the image, consider it corrupted/not processed
+                    return False
         
         # All files exist and are valid
         return True
@@ -331,6 +410,9 @@ if __name__ == "__main__":
     parser.add_argument("--input_folder", type=str, required=True, help="Path to input data")
     parser.add_argument("--num_workers", type=int, default=16, help="Number of parallel workers")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode, process only single video")
+    parser.add_argument("--metadata_csv", type=str, default=None, help="Path to metadata CSV file (default: input_folder/metadata.csv)")
+    parser.add_argument("--separate_failed", action="store_true", help="Separate successful and failed videos into different CSV files (default: False)")
+    parser.add_argument("--no-skip-processed", dest="skip_processed", action="store_false", default=True, help="Process all clips even if already processed (default: skip processed)")
     args = parser.parse_args()
 
     input_folder = args.input_folder
@@ -344,7 +426,7 @@ if __name__ == "__main__":
         exit()
 
     tasks = []
-    already_processed = 0
+    skipped_videos = []  # Track skipped (already processed) videos for CSV
 
     print("Scanning directory for videos...")
     # Pre-scan directories to build task list
@@ -366,14 +448,17 @@ if __name__ == "__main__":
                 continue
             
             # Check if clip is already processed (all labeled files exist and are valid)
-            if is_clip_processed(video_path, args.input_folder):
-                already_processed += 1
+            if args.skip_processed and is_clip_processed(video_path, args.input_folder):
+                skipped_videos.append({"video_id": video_id, "start_frame": start_frame})
                 continue
             
             # We store the args tuple for each job
             tasks.append((video_path, args.input_folder))
     
-    print(f"Found {already_processed} clips already processed. Processing {len(tasks)} remaining clips.")
+    if args.skip_processed:
+        print(f"Found {len(skipped_videos)} clips already processed. Processing {len(tasks)} remaining clips.")
+    else:
+        print(f"Processing {len(tasks)} clips (skipping disabled).")
     
     if args.debug:
         tasks = tasks[:1]
@@ -392,5 +477,98 @@ if __name__ == "__main__":
                 total=len(tasks),
                 desc="Labeling Videos"
             ))
+    else:
+        results = []
+    
+    # Set up CSV files
+    if args.metadata_csv is None:
+        metadata_csv_path = os.path.join(input_folder, "metadata.csv")
+    else:
+        metadata_csv_path = args.metadata_csv
+    
+    # Create CSV file(s) with headers
+    fieldnames = ['video', 'reference_image', 'camera', 'control_video_new', 'prompt']
+    csv_file = open(metadata_csv_path, 'w', newline='', encoding='utf-8')
+    csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+    csv_writer.writeheader()
+    
+    csv_file_failed = None
+    csv_writer_failed = None
+    metadata_failed_csv_path = None
+    
+    if args.separate_failed:
+        # Create failed CSV path
+        if args.metadata_csv is None:
+            metadata_failed_csv_path = os.path.join(input_folder, "metadata_failed.csv")
+        else:
+            base_path, ext = os.path.splitext(metadata_csv_path)
+            metadata_failed_csv_path = f"{base_path}_failed{ext}"
+        
+        csv_file_failed = open(metadata_failed_csv_path, 'w', newline='', encoding='utf-8')
+        csv_writer_failed = csv.DictWriter(csv_file_failed, fieldnames=fieldnames)
+        csv_writer_failed.writeheader()
+    
+    # Write CSV rows from collected results
+    print("Writing metadata CSV files...")
+    
+    # Helper function to write a CSV row for a video
+    def write_csv_row(video_id, start_frame, success, csv_writer, csv_writer_failed):
+        # Check if required files exist
+        save_dir = os.path.join(input_folder, video_id, start_frame)
+        path_caption = os.path.join(save_dir, "caption.txt")
+        path_fused_pose = os.path.join(save_dir, "fused_pose.npy")
+        
+        if not (os.path.exists(path_caption) and os.path.exists(path_fused_pose)):
+            return False
+        
+        # Create relative paths
+        rel_video_path = os.path.join(".", video_id, start_frame, "video.mp4").replace(os.sep, "/")
+        rel_reference_img = os.path.join(".", video_id, start_frame, "reference_img.png").replace(os.sep, "/")
+        rel_camera = os.path.join(".", video_id, start_frame, "fused_pose.npy").replace(os.sep, "/")
+        rel_control_video = os.path.join(".", video_id, start_frame, "skeleton.mp4").replace(os.sep, "/")
+        rel_prompt = os.path.join(".", video_id, start_frame, "caption.txt").replace(os.sep, "/")
+        
+        row_data = {
+            'video': rel_video_path,
+            'reference_image': rel_reference_img,
+            'camera': rel_camera,
+            'control_video_new': rel_control_video,
+            'prompt': rel_prompt
+        }
+        
+        if csv_writer_failed is not None:
+            # Separate CSV files mode
+            if success:
+                csv_writer.writerow(row_data)
+            else:
+                csv_writer_failed.writerow(row_data)
+        else:
+            # Single CSV file mode - write all rows
+            csv_writer.writerow(row_data)
+        return True
+    
+    # Write results from newly processed videos
+    all_results = list(results) if results else []
+    for result in tqdm.tqdm(all_results, desc="Writing CSV", leave=False):
+        if result is None:
+            continue
+        
+        video_id = result["video_id"]
+        start_frame = result["start_frame"]
+        success = result["success"]
+        write_csv_row(video_id, start_frame, success, csv_writer, csv_writer_failed)
+    
+    # Write skipped (already processed) videos, assuming they're successful
+    if skipped_videos:
+        for skipped in tqdm.tqdm(skipped_videos, desc="Writing skipped videos to CSV", leave=False):
+            video_id = skipped["video_id"]
+            start_frame = skipped["start_frame"]
+            write_csv_row(video_id, start_frame, True, csv_writer, csv_writer_failed)  # Assume successful
+    
+    csv_file.close()
+    print(f"Metadata CSV saved to: {metadata_csv_path}")
+    if csv_file_failed is not None:
+        csv_file_failed.close()
+        print(f"Failed metadata CSV saved to: {metadata_failed_csv_path}")
             
     print("Processing complete.")
