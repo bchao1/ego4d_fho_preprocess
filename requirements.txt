@@ -6,3 +6,4 @@ imageio[ffmpeg]
 opencv-python
 pandas
 tqdm
+scipy

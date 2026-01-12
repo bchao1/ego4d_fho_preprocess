@@ -11,6 +11,7 @@ import cv2
 import csv
 from argparse import ArgumentParser
 import tqdm
+from scipy.spatial.transform import Rotation
 
 # --- Configuration ---
 # Uses the standard/full model. If you downloaded the full model, change path here.
@@ -43,6 +44,68 @@ CONNECTIONS = {
 
 def landmarks_to_list(landmarks):
     return [{'x': lm.x, 'y': lm.y, 'z': lm.z} for lm in landmarks]
+
+def matrix_to_quaternion_wxyz(rotation_matrix):
+    """
+    Convert 3x3 rotation matrix to quaternion in wxyz format.
+    
+    Args:
+        rotation_matrix: 3x3 rotation matrix
+        
+    Returns:
+        quaternion: [w, x, y, z] format
+    """
+    rot = Rotation.from_matrix(rotation_matrix)
+    quat_xyzw = rot.as_quat()  # scipy returns [x, y, z, w]
+    quat_wxyz = [quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]
+    return quat_wxyz
+
+def convert_fused_pose_to_json(fused_pose_path, output_json_path=None):
+    """
+    Convert fused_pose.npy to camera.json format.
+    
+    Args:
+        fused_pose_path: Path to fused_pose.npy file
+        output_json_path: Path to output camera.json file (if None, uses same directory)
+        
+    Returns:
+        Path to created camera.json file, or None if conversion failed
+    """
+    try:
+        # Load poses (shape: [N, 4, 4])
+        poses = np.load(fused_pose_path)
+        
+        # Create output path if not specified
+        if output_json_path is None:
+            output_json_path = os.path.join(os.path.dirname(fused_pose_path), 'camera.json')
+        
+        # Convert each pose to JSON format
+        camera_data = {}
+        
+        for frame_idx in range(len(poses)):
+            c2w = poses[frame_idx]  # Camera-to-world transformation matrix
+            
+            # Extract translation (xyz)
+            translation = c2w[:3, 3].tolist()
+            
+            # Extract rotation matrix and convert to quaternion (wxyz)
+            rotation_matrix = c2w[:3, :3]
+            quaternion = matrix_to_quaternion_wxyz(rotation_matrix)
+            
+            # Store in JSON format (frame indices as strings)
+            camera_data[str(frame_idx)] = {
+                "translation_xyz": translation,
+                "quaternion_wxyz": quaternion
+            }
+        
+        # Write JSON file
+        with open(output_json_path, 'w') as f:
+            json.dump(camera_data, f, indent=2)
+        
+        return output_json_path
+    except Exception as e:
+        print(f"Warning: Failed to convert {fused_pose_path} to camera.json: {e}")
+        return None
 
 def draw_depth_skeleton(height, width, hand_landmarks_list):
     """
@@ -277,16 +340,21 @@ def process_video(video_path, output_root, csv_writer, csv_writer_failed=None):
         with open(path_json, 'w') as f:
             json.dump(results_dict, f, indent=4)
         
+        # Convert fused_pose.npy to camera.json if it exists
+        path_camera_json = os.path.join(save_dir, "camera.json")
+        if os.path.exists(path_fused_pose):
+            convert_fused_pose_to_json(path_fused_pose, path_camera_json)
+        
         # Write metadata row to CSV
         # Use relative paths from output_root
         rel_video_path = os.path.join(".", video_id, start_frame, "video.mp4").replace(os.sep, "/")
         rel_reference_img = os.path.join(".", video_id, start_frame, "reference_img.png").replace(os.sep, "/")
-        rel_camera = os.path.join(".", video_id, start_frame, "fused_pose.npy").replace(os.sep, "/")
+        rel_camera = os.path.join(".", video_id, start_frame, "camera.json").replace(os.sep, "/")
         rel_control_video = os.path.join(".", video_id, start_frame, "skeleton.mp4").replace(os.sep, "/")
         rel_prompt = os.path.join(".", video_id, start_frame, "caption.txt").replace(os.sep, "/")
         
-        # Only write row if caption.txt and fused_pose.npy exist
-        if os.path.exists(path_caption) and os.path.exists(path_fused_pose):
+        # Only write row if caption.txt and camera.json exist
+        if os.path.exists(path_caption) and os.path.exists(path_camera_json):
             row_data = {
                 'video': rel_video_path,
                 'reference_image': rel_reference_img,
@@ -304,7 +372,7 @@ def process_video(video_path, output_root, csv_writer, csv_writer_failed=None):
                 # Single CSV file mode - write all rows
                 csv_writer.writerow(row_data)
         else:
-            print(f"Warning: Skipping CSV entry for {video_id}/{start_frame} - missing caption.txt or fused_pose.npy")
+            print(f"Warning: Skipping CSV entry for {video_id}/{start_frame} - missing caption.txt or camera.json")
             
     except Exception as e:
         print(f"Error processing {video_id}/{start_frame}: {e}")
